@@ -176,3 +176,89 @@ pub fn concat_hash(hash: &mut LinkedHashMap<Yaml, Yaml>, yaml: &Yaml) {
         _ => (),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use linked_hash_map::LinkedHashMap;
+    use yaml_rust::Yaml;
+
+    #[test]
+    fn concat_hash_test() {
+        let mut hash1 = LinkedHashMap::new();
+        hash1.insert(Yaml::from_str("key1"), Yaml::from_str("value1"));
+        hash1.insert(Yaml::from_str("key2"), Yaml::from_str("value2"));
+
+        let mut hash2 = LinkedHashMap::new();
+        hash2.insert(Yaml::from_str("key3"), Yaml::from_str("value3"));
+        hash2.insert(Yaml::from_str("key2"), Yaml::from_str("new value"));
+
+        concat_hash(&mut hash1, &Yaml::Hash(hash2));
+
+        let mut expected = LinkedHashMap::new();
+        expected.insert(Yaml::from_str("key1"), Yaml::from_str("value1"));
+        expected.insert(Yaml::from_str("key3"), Yaml::from_str("value3"));
+        expected.insert(Yaml::from_str("key2"), Yaml::from_str("new value"));
+
+        assert_eq!(hash1, expected);
+    }
+
+    #[test]
+    fn map_test() {
+        let yaml = util::load_str(
+            r##"
+array:
+    - a
+    - b
+    - c
+    - nested:
+        - d
+        - e
+        - f
+string: stringvalue
+obj:
+    prop1: g
+    prop2: h
+    nested:
+        prop3: i
+        prop4: j
+"##,
+        );
+        let expected = util::load_str(
+            r##"
+array:
+    - a_val
+    - b_val
+    - c_val
+    - nested:
+        - d_val
+        - e_val
+        - f_val
+string: stringvalue_val
+obj:
+    prop1: g_val
+    nested:
+        prop3: i_val
+        prop4: j_val
+"##,
+        );
+        let result = map(&yaml.unwrap(), &|key, val| {
+            if None != key {
+                if key.unwrap().as_str().unwrap() == "prop2" {
+                    return ReplaceResult::Delete;
+                }
+            }
+            match val {
+                Yaml::Hash(_) => ReplaceResult::NoReplace,
+                Yaml::Array(_) => ReplaceResult::NoReplace,
+                other => {
+                    let v = Yaml::from_str(
+                        format!("{}_val", other.as_str().unwrap()).as_str(),
+                    );
+                    ReplaceResult::Replace(v)
+                }
+            }
+        });
+        assert_eq!(result.unwrap(), expected.unwrap());
+    }
+}
